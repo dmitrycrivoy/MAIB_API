@@ -1,13 +1,73 @@
-# MaibAPI
-Maib online payments php SDK
+# MAIB API
 
-## Installing
+## Предисловие
+После обращения в банк вам должны дать ссылку на ресурсы, которые включают в себя инструкции по установке и тестированию, API, правила использования и другую информацию. 
+Здесь сделаем упор именно на процесс тестирования, с которым могут возникнуть сложности (у меня возникли), но также рассмоттрим другую полезную информацию.
+Оригинал информации о настройке и тестировании (на румынском языке):
+<https://docs.google.com/document/d/1ZEkmYhlfHQs9VRHIENbHcVwLMvCLCH5vb-hYHvaVP4s/edit>
 
+
+## Подготовка
+### Сертификаты
+У вас должен быть файл в pfx (pkcs12) формате, который включает в себя закрытый ключ, сертификат удостоверяющего центра (CA - Certification Authority) и .
+Он необходим для доступа к тестовому или продакшн серверу (в зависимотси от ваших нужд вам выдадут соответствующий).
+Но для дальнейшей работы с этими сертификатами и ключом их необходимо извлечь из pfx-файла.
+
+#### Извлечение сертификатов из pfx-файла
+Сохранять будем с расширением pem, как это изначально преполагается для использования.
 ```bash
-composer require fruitware/maib-api
-```
+# Создать CA (Certification Authority) сертификат:
+openssl pkcs12 -in <filename>.pfx -out cacert.pem -cacerts -nokeys
 
-## Usage
+# Создать сам сертификат:
+openssl pkcs12 -in <filename>.pfx -out pcert.pem -clcerts -nokeys
+
+# Создать приватный ключ с парольной фразой (без неё никак не экпортировать ключ из pfx):
+openssl pkcs12 -in <filename>.pfx -out key.key -nocerts
+
+# Затем создать приватный ключ без парольной фразы:
+openssl rsa -in key.key -out key.pem
+
+```
+Необходим приватный ключ именно без парольной фразы, потому что иначе работать не будет.  
+Проверить ключ и сертификат можно с помощью хешей:
+```bash
+openssl x509 -noout -modulus -in cert.pem | openssl md5
+openssl rsa -noout -modulus -in key.pem | openssl md5
+```
+Оба хеша должны быть одинаковыми.
+
+### Адреса серверов
+Адреса тестовых серверов:  
+Merchant: https://ecomm.maib.md:4499/ecomm2/MerchantHandler  
+Client:   https://ecomm.maib.md:7443/ecomm2/ClientHandler
+
+Адреса продакшн серверов:  
+Merchant: https://maib.ecommerce.md:11440/ecomm01/MerchantHandler  
+Client:   https://maib.ecommerce.md:443/ecomm01/ClientHandler
+
+
+## Тестирование
+После подтверждения IP вашего сервера как доверенного, банк обяжет вас пройти проверку команд.
+Для данной проверки можно использовать код, указанный ниже. Также среди файлов от MAIB возможно будут html-формы, которые также можно использовать для проверки.
+Я использовал первый вариант, так как он немного быстрее в реализации.
+
+На данный момент банк описывает следующую последовательность проверки команд (лучше уточнить у банка):
+1. Генерация платежа (команда = V).
+2. Проверка статуса платежа (команда = C).
+3. Процедура полного/частичного возврата платежа (команда = R).
+4. Закрытие рабочего дня (команда = B).
+
+После генерации платежа (шаг 1) будет выдан TRANSACTION_ID. Его нужно будет использовать как один из параметров в функциях кода для проверки других команд (php) или
+как trans_id формы html.
+
+**Какая именно функция (и последовательность её параметров) в коде соответствует вышеуказанной команде можно уточнить в файле _MaibClient.php_.**
+
+Пояснения для некоторых полей:  
+base_url - адрес тестового или продакшн сервера (Merchant).  
+verify - полученный ранее сертификат cacert.pem.  
+cert - полученный ранее сертификат pcert.pem.  
+ssl_key - полученный ранее ключ key.pem.
 
 ```php
 namespace MyProject;
@@ -23,7 +83,7 @@ use Monolog\Logger;
 
 //set options
 $options = [
-	'base_url' => 'https://ecomm.maib.md:4455',
+	'base_url' => 'https://ecomm.maib.md:4499/ecomm2/MerchantHandler',
 	'debug'  => true,
 	'verify' => false,
 	'defaults' => [
@@ -69,5 +129,26 @@ var_dump($client->revertTransaction('1', '1'));
 //close business day
 var_dump($client->closeDay());
 
+```
 
+html-форма для генерации платежа:
+```html
+<form action="https://ecomm.maib.md:4499/ecomm2/MerchantHandler" method="post">
+	<input type="text" name="command" value="V" /><br>
+	<input type="text" name="amount" value="100" /><br>
+	<input type="text" name="client_ip_addr" value="127.0.0.1" /><br>
+	<input type="text" name="currency" value="498" /><br>
+	<input type="text" name="language" value="ru" /><br>
+	<input type="text" name="description" value="Product/Service Description" /><br>
+	<input type="submit" value="Submit" name="Submit" /><br>
+</form>
+```
+
+html-форма для проверки платежа:
+```html
+<form action="https://ecomm.maib.md:4499/ecomm2/MerchantHandler" method="post">
+	<input type="text" name="command" value="C" /><br>
+	<input type="text" name="trans_id" value="TRANS_ID" /><br>
+	<input type="submit" value="Submit" name="Submit" /><br>
+</form>
 ```
