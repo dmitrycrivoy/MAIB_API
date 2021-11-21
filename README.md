@@ -15,7 +15,7 @@
 
 #### Извлечение сертификатов из pfx-файла
 Сохранять будем с расширением pem, как это изначально преполагается для использования.
-```bash
+```sh
 # Создать CA (Certification Authority) сертификат:
 openssl pkcs12 -in <filename>.pfx -out cacert.pem -cacerts -nokeys
 
@@ -31,7 +31,7 @@ openssl rsa -in key.key -out key.pem
 ```
 Необходим приватный ключ именно без парольной фразы, потому что иначе работать не будет.  
 Проверить ключ и сертификат можно с помощью хешей:
-```bash
+```sh
 openssl x509 -noout -modulus -in cert.pem | openssl md5
 openssl rsa -noout -modulus -in key.pem | openssl md5
 ```
